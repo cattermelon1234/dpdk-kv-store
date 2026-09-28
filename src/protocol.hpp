@@ -16,10 +16,10 @@
  * 8-8+value_length: value bytes 
  */ 
 
-#include <iostream>
 #include <span>
 #include <cstddef>
 #include <cstdint>
+#define MAX_VALUE_SIZE 65535
 
 inline constexpr std::uint8_t protocol_version = 1;
 
@@ -73,6 +73,7 @@ struct RequestView {
 };
 
 struct ResponseView {
+  Status status;
   std::uint32_t response_id;
   std::span<const std::byte> value;
 };
@@ -87,7 +88,6 @@ DecodeError decode_request(
 // output is the full UDP response [header][value]
 EncodeError encode_response(
     const ResponseView& response, 
-    std::span<const std::byte> output, 
+    std::span<std::byte> output, 
     std::size_t& bytes_written
 );
-

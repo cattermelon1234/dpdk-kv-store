@@ -6,6 +6,26 @@
 
 #include "protocol.hpp"
 
+#include <arpa/inet.h>
+#include <cstring>
+
+namespace {
+
+// The caller must check that output has room for the field at offset.
+inline void write_u16(std::span<std::byte> output, std::size_t offset,
+                      std::uint16_t value) {
+  const std::uint16_t wire_value = htons(value);
+  std::memcpy(output.data() + offset, &wire_value, sizeof(wire_value));
+}
+
+inline void write_u32(std::span<std::byte> output, std::size_t offset,
+                      std::uint32_t value) {
+  const std::uint32_t wire_value = htonl(value);
+  std::memcpy(output.data() + offset, &wire_value, sizeof(wire_value));
+}
+
+} // namespace
+
 // payload is the full UDP request [header][key][value]
 DecodeError decode_request(std::span<const std::byte> payload,
                            RequestView &out) {
@@ -64,5 +84,20 @@ DecodeError decode_request(std::span<const std::byte> payload,
 
 // output is the full UDP response [header][value]
 EncodeError encode_response(const ResponseView &response,
-                            std::span<const std::byte> output,
-                            std::size_t &bytes_written);
+                            std::span<std::byte> output,
+                            std::size_t &bytes_written) {
+  if (output.size() < response_wire::header_size) {
+    return EncodeError::BUFFER_TOO_SMALL;
+  }
+  if (response.value.size() > MAX_VALUE_SIZE) {
+    return EncodeError::INVALID_RESPONSE;
+  }
+  output[response_wire::version_offset] = std::byte{protocol_version};
+  output[response_wire::status_offset] =
+      static_cast<std::byte>(response.status);
+  write_u16(output, response_wire::value_length_offset, response.value.size());
+  write_u32(output, response_wire::response_id_offset, response.response_id);
+  std::memcpy(output.data() + response_wire::header_size, response.value.data(),
+              response.value.size());
+  return EncodeError::NONE;
+}
