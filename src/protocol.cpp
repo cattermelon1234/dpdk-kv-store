@@ -86,18 +86,39 @@ DecodeError decode_request(std::span<const std::byte> payload,
 EncodeError encode_response(const ResponseView &response,
                             std::span<std::byte> output,
                             std::size_t &bytes_written) {
-  if (output.size() < response_wire::header_size) {
-    return EncodeError::BUFFER_TOO_SMALL;
-  }
+  bytes_written = 0;
   if (response.value.size() > MAX_VALUE_SIZE) {
     return EncodeError::INVALID_RESPONSE;
   }
+  switch (response.status) {
+  case Status::OK:
+    break;
+  case Status::NOT_FOUND:
+  case Status::FULL:
+    if (!response.value.empty()) {
+      return EncodeError::INVALID_RESPONSE;
+    }
+    break;
+  default:
+    return EncodeError::INVALID_RESPONSE;
+  }
+
+  const std::size_t response_size =
+      response_wire::header_size + response.value.size();
+  if (output.size() < response_size) {
+    return EncodeError::BUFFER_TOO_SMALL;
+  }
+
   output[response_wire::version_offset] = std::byte{protocol_version};
   output[response_wire::status_offset] =
       static_cast<std::byte>(response.status);
-  write_u16(output, response_wire::value_length_offset, response.value.size());
+  write_u16(output, response_wire::value_length_offset,
+            static_cast<std::uint16_t>(response.value.size()));
   write_u32(output, response_wire::response_id_offset, response.response_id);
-  std::memcpy(output.data() + response_wire::header_size, response.value.data(),
-              response.value.size());
+  if (!response.value.empty()) {
+    std::memcpy(output.data() + response_wire::header_size, response.value.data(),
+                response.value.size());
+  }
+  bytes_written = response_size;
   return EncodeError::NONE;
 }

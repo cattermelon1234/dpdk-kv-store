@@ -86,6 +86,8 @@ DecodeError decode_request(
 );
 
 // output is the full UDP response [header][value]
+// Input value and output storage must not overlap. No ownership is transferred.
+// On failure, output is unchanged and bytes_written is zero.
 EncodeError encode_response(
     const ResponseView& response, 
     std::span<std::byte> output, 
